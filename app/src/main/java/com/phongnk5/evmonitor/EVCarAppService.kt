@@ -1,73 +1,51 @@
 package com.phongnk5.evmonitor
 
 import android.content.Intent
+import androidx.car.app.AppManager
 import androidx.car.app.CarAppService
 import androidx.car.app.Screen
 import androidx.car.app.Session
+import androidx.car.app.SurfaceCallback
+import androidx.car.app.SurfaceContainer
 import androidx.car.app.validation.HostValidator
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelStore
-import androidx.lifecycle.ViewModelStoreOwner
-import com.phongnk5.evmonitor.carapp.screen.EVChargingScreen
-import com.phongnk5.evmonitor.carapp.viewmodel.EVChargingViewModel
-import com.phongnk5.evmonitor.domain.usecase.GetChargingStationsUseCase
-import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
-import dagger.hilt.android.AndroidEntryPoint
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
+import com.phongnk5.evmonitor.carapp.screens.MainMapScreen
+import com.phongnk5.evmonitor.data.GoongConfig
+import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.OnMapReadyCallback
+import org.maplibre.android.maps.Style
 
-@AndroidEntryPoint
 class EVCarAppService : CarAppService() {
+    override fun createHostValidator(): HostValidator = HostValidator.ALLOW_ALL_HOSTS_VALIDATOR
+    override fun onCreateSession(): Session = EvSession()
+}
 
-    @EntryPoint
-    @InstallIn(SingletonComponent::class)
-    interface EVCarAppServiceEntryPoint {
-        fun getGetChargingStationsUseCase(): GetChargingStationsUseCase
+class EvSession : Session(), SurfaceCallback, OnMapReadyCallback {
+    private var mapLibreMap: MapLibreMap? = null
+
+    init {
+        lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onCreate(owner: LifecycleOwner) {
+                carContext.getCarService(AppManager::class.java).setSurfaceCallback(this@EvSession)
+            }
+        })
     }
 
-    override fun createHostValidator(): HostValidator {
-        return HostValidator.ALLOW_ALL_HOSTS_VALIDATOR
+    override fun onSurfaceAvailable(surfaceContainer: SurfaceContainer) {
+        synchronized(this) { }
     }
 
-    override fun onCreateSession(): Session {
-        return object : Session(), ViewModelStoreOwner {
-            private val mViewModelStore = ViewModelStore()
+    override fun onSurfaceDestroyed(surfaceContainer: SurfaceContainer) {
+        mapLibreMap = null
+    }
 
-            override val viewModelStore: ViewModelStore
-                get() = mViewModelStore
+    override fun onMapReady(map: MapLibreMap) {
+        mapLibreMap = map
+        map.setStyle(Style.Builder().fromUri(GoongConfig.getStyleUrl()))
+    }
 
-            init {
-                lifecycle.addObserver(object : DefaultLifecycleObserver {
-                    override fun onDestroy(owner: LifecycleOwner) {
-                        mViewModelStore.clear()
-                    }
-                })
-            }
-
-            override fun onCreateScreen(intent: Intent): Screen {
-                val entryPoint = EntryPointAccessors.fromApplication(
-                    applicationContext,
-                    EVCarAppServiceEntryPoint::class.java
-                )
-
-                val factory = object : ViewModelProvider.Factory {
-                    @Suppress("UNCHECKED_CAST")
-                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                        if (modelClass.isAssignableFrom(EVChargingViewModel::class.java)) {
-                            return EVChargingViewModel(entryPoint.getGetChargingStationsUseCase()) as T
-                        }
-                        throw IllegalArgumentException("Unknown ViewModel class")
-                    }
-                }
-
-                val viewModel = ViewModelProvider(this, factory)[EVChargingViewModel::class.java]
-                
-                return EVChargingScreen(carContext, viewModel)
-            }
-        }
+    override fun onCreateScreen(intent: Intent): Screen {
+        return MainMapScreen(carContext)
     }
 }

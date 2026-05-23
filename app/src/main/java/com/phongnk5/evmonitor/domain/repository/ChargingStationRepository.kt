@@ -1,8 +1,9 @@
 package com.phongnk5.evmonitor.domain.repository
 
 import com.phongnk5.evmonitor.domain.model.ChargingStation
-import kotlinx.coroutines.flow.Flow
+import com.phongnk5.evmonitor.data.DTOs.GoongPlaceDetailResult
 
-interface ChargingStationRepository {
-    fun getChargingStations(): Flow<List<ChargingStation>>
+interface EvRepository {
+    suspend fun getNearbyStations(lat: Double, lng: Double): Result<List<ChargingStation>>
+    suspend fun getPlaceDetail(placeId: String): Result<GoongPlaceDetailResult>
 }

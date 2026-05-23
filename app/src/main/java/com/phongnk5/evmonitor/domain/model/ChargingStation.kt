@@ -6,6 +6,5 @@ data class ChargingStation(
     val address: String,
     val latitude: Double,
     val longitude: Double,
-    val distanceKm: Double,
-    val availableConnectors: Int
+    val distance: Double
 )

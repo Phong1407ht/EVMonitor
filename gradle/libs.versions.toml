@@ -18,6 +18,7 @@ ksp = "1.9.22-1.0.17"
 androidxHilt = "1.2.0"
 navigationUiKtx = "2.7.7"
 retrofit = "3.0.0"
+maplibre = "11.5.1"
 
 [libraries]
 androidx-app = { module = "androidx.car.app:app", version.ref = "app" }
@@ -41,6 +42,7 @@ androidx-hilt-navigation = { group = "androidx.hilt", name = "hilt-navigation", 
 androidx-hilt-compiler = { group = "androidx.hilt", name = "hilt-compiler", version.ref = "androidxHilt" }
 retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
 retrofit2-converter-gson = { module = "com.squareup.retrofit2:converter-gson", version.ref = "converterGson" }
+maplibre-android = { module = "org.maplibre.gl:android-sdk", version.ref = "maplibre" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
