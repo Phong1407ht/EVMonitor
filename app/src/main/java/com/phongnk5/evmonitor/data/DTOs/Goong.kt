@@ -29,3 +29,27 @@ data class GoongPhoto(
     val photo_reference: String
 )
 
+// Distance Matrix DTOs
+data class GoongDistanceMatrixResponse(
+    val rows: List<DistanceMatrixRow>
+)
+
+data class DistanceMatrixRow(
+    val elements: List<DistanceMatrixElement>
+)
+
+data class DistanceMatrixElement(
+    val distance: DistanceData,
+    val duration: DurationData,
+    val status: String
+)
+
+data class DistanceData(
+    val text: String,
+    val value: Long
+)
+
+data class DurationData(
+    val text: String,
+    val value: Long
+)

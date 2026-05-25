@@ -22,16 +22,15 @@ import kotlinx.coroutines.launch
 
 class MainMapScreen(carContext: CarContext) : Screen(carContext) {
 
-    private val entryPoint =
-        EntryPointAccessors.fromApplication(carContext, CarAppEntryPoint::class.java)
+    private val entryPoint = EntryPointAccessors.fromApplication(carContext, CarAppEntryPoint::class.java)
     private val viewModel = EvViewModel(
         entryPoint.getStationsUseCase(),
         entryPoint.getPlaceDetailUseCase()
     )
 
     private var isLowBattery = false
-    private var currentLat = 21.0272
-    private var currentLng = 105.5269
+    private var currentLat = 21.0138 
+    private var currentLng = 105.5269 
     private var hasUpdatedLocation = false
 
     init {
@@ -44,10 +43,7 @@ class MainMapScreen(carContext: CarContext) : Screen(carContext) {
     }
 
     private fun checkAndStartLocation() {
-        val permissions = listOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        )
+        val permissions = listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
         if (permissions.all { carContext.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }) {
             startLocationUpdates()
         }
@@ -55,8 +51,7 @@ class MainMapScreen(carContext: CarContext) : Screen(carContext) {
 
     @SuppressLint("MissingPermission")
     private fun startLocationUpdates() {
-        val locationManager =
-            carContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val locationManager = carContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val locationListener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 currentLat = location.latitude
@@ -70,14 +65,8 @@ class MainMapScreen(carContext: CarContext) : Screen(carContext) {
         }
 
         try {
-            locationManager.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER,
-                5000L,
-                10f,
-                locationListener
-            )
-            val lastLocation =
-                locationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000L, 10f, locationListener)
+            val lastLocation = locationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
             lastLocation?.let {
                 currentLat = it.latitude
                 currentLng = it.longitude
@@ -91,8 +80,7 @@ class MainMapScreen(carContext: CarContext) : Screen(carContext) {
     }
 
     private fun monitorBatteryLevel() {
-        val hardwareManager =
-            carContext.getCarService(CarContext.HARDWARE_SERVICE) as CarHardwareManager
+        val hardwareManager = carContext.getCarService(CarContext.HARDWARE_SERVICE) as CarHardwareManager
         val exec = ContextCompat.getMainExecutor(carContext)
 
         hardwareManager.carInfo.addEnergyLevelListener(exec) { energyLevel ->
@@ -105,12 +93,8 @@ class MainMapScreen(carContext: CarContext) : Screen(carContext) {
     }
 
     override fun onGetTemplate(): Template {
-        val permissions = listOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        )
-        val isPermissionGranted =
-            permissions.all { carContext.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+        val permissions = listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+        val isPermissionGranted = permissions.all { carContext.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
 
         if (!isPermissionGranted) {
             return MessageTemplate.Builder("Ứng dụng cần quyền vị trí.")
@@ -133,20 +117,11 @@ class MainMapScreen(carContext: CarContext) : Screen(carContext) {
             itemListBuilder.setNoItemsMessage(viewModel.apiStatus.value ?: "Đang tìm trạm sạc...")
         } else {
             stations.forEach { station ->
-                val results = FloatArray(1)
-                Location.distanceBetween(
-                    currentLat,
-                    currentLng,
-                    station.latitude,
-                    station.longitude,
-                    results
-                )
-                val distInMeters = results[0].toDouble()
-
+                // Sử dụng khoảng cách thực tế từ API Distance Matrix đã được Repository cung cấp
                 val distanceSpan = DistanceSpan.create(
-                    Distance.create(distInMeters / 1000.0, Distance.UNIT_KILOMETERS)
+                    Distance.create(station.distance, Distance.UNIT_KILOMETERS)
                 )
-
+                
                 val title = SpannableString("  ${station.name}")
                 title.setSpan(distanceSpan, 0, 1, SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE)
 
@@ -155,26 +130,13 @@ class MainMapScreen(carContext: CarContext) : Screen(carContext) {
                         .setTitle(title)
                         .addText(station.address)
                         .setOnClickListener {
-                            screenManager.push(
-                                StationDetailScreen(
-                                    carContext,
-                                    station.id,
-                                    viewModel
-                                )
-                            )
+                            screenManager.push(StationDetailScreen(carContext, station.id, viewModel))
                         }
                         .setMetadata(
                             Metadata.Builder()
-                                .setPlace(
-                                    Place.Builder(
-                                        CarLocation.create(
-                                            station.latitude,
-                                            station.longitude
-                                        )
-                                    )
-                                        .setMarker(PlaceMarker.Builder().build())
-                                        .build()
-                                )
+                                .setPlace(Place.Builder(CarLocation.create(station.latitude, station.longitude))
+                                    .setMarker(PlaceMarker.Builder().build())
+                                    .build())
                                 .build()
                         )
                         .build()
