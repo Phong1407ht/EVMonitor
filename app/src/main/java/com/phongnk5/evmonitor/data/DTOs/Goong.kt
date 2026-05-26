@@ -29,7 +29,6 @@ data class GoongPhoto(
     val photo_reference: String
 )
 
-// Distance Matrix DTOs
 data class GoongDistanceMatrixResponse(
     val rows: List<DistanceMatrixRow>
 )

@@ -117,7 +117,7 @@ class MainMapScreen(carContext: CarContext) : Screen(carContext) {
             itemListBuilder.setNoItemsMessage(viewModel.apiStatus.value ?: "Đang tìm trạm sạc...")
         } else {
             stations.forEach { station ->
-                // Sử dụng khoảng cách thực tế từ API Distance Matrix đã được Repository cung cấp
+                // Hiển thị khoảng cách bằng DistanceSpan ở đầu tiêu đề
                 val distanceSpan = DistanceSpan.create(
                     Distance.create(station.distance, Distance.UNIT_KILOMETERS)
                 )
@@ -125,10 +125,24 @@ class MainMapScreen(carContext: CarContext) : Screen(carContext) {
                 val title = SpannableString("  ${station.name}")
                 title.setSpan(distanceSpan, 0, 1, SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE)
 
+                // Nội dung hiển thị thời gian dự kiến và địa chỉ
+                val secondaryText = if (station.duration.isNotEmpty()) {
+                    "Thời gian dự kiến: ${station.duration}"
+                } else {
+                    station.address
+                }
+
+                val rowBuilder = Row.Builder()
+                    .setTitle(title)
+                    .addText(secondaryText)
+                
+                // Nếu đã hiển thị duration ở dòng 1, hiển thị address ở dòng 2
+                if (station.duration.isNotEmpty()) {
+                    rowBuilder.addText(station.address)
+                }
+
                 itemListBuilder.addItem(
-                    Row.Builder()
-                        .setTitle(title)
-                        .addText(station.address)
+                    rowBuilder
                         .setOnClickListener {
                             screenManager.push(StationDetailScreen(carContext, station.id, viewModel))
                         }

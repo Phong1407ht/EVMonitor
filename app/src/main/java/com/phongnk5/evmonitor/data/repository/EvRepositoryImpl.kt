@@ -8,13 +8,15 @@ import com.phongnk5.evmonitor.domain.repository.EvRepository
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import retrofit2.HttpException
 
 class EvRepositoryImpl(private val api: GoongApiService) : EvRepository {
     override suspend fun getNearbyStations(lat: Double, lng: Double): Result<List<ChargingStation>> = coroutineScope {
         Log.d("EvRepository", ">>> [API CALL] Autocomplete with: $lat,$lng")
         try {
             val autocompleteResponse = api.autocomplete(
-                input = "trạm sạc",
+                input = "trạm sạc ô tô điện",
                 location = "$lat,$lng"
             )
             
@@ -22,11 +24,14 @@ class EvRepositoryImpl(private val api: GoongApiService) : EvRepository {
                 return@coroutineScope Result.success(emptyList())
             }
 
-            val detailDeferreds = autocompleteResponse.predictions.map { prediction ->
+            val detailDeferreds = autocompleteResponse.predictions.mapIndexed { index, prediction ->
                 async { 
                     try {
-                        api.getPlaceDetail(prediction.place_id).result
+                        // Stagger the requests slightly to avoid hitting rate limits instantly
+                        if (index > 0) delay(index * 100L)
+                        retryApiCall { api.getPlaceDetail(prediction.place_id).result }
                     } catch (e: Exception) {
+                        Log.e("EvRepository", "Failed to get detail for ${prediction.place_id}", e)
                         null
                     }
                 }
@@ -43,14 +48,16 @@ class EvRepositoryImpl(private val api: GoongApiService) : EvRepository {
             }
             
             val distanceMatrixResponse = try {
-                api.getDistanceMatrix(origins, destinations)
+                retryApiCall { api.getDistanceMatrix(origins, destinations) }
             } catch (e: Exception) {
                 Log.e("EvRepository", "Distance Matrix failed", e)
                 null
             }
 
             val stations = details.mapIndexed { index, detail ->
-                val distanceKm = distanceMatrixResponse?.rows?.firstOrNull()?.elements?.getOrNull(index)?.distance?.value?.div(1000.0) ?: 0.0
+                val element = distanceMatrixResponse?.rows?.firstOrNull()?.elements?.getOrNull(index)
+                val distanceKm = element?.distance?.value?.div(1000.0) ?: 0.0
+                val durationText = element?.duration?.text ?: ""
                 
                 ChargingStation(
                     id = detail.place_id,
@@ -58,7 +65,8 @@ class EvRepositoryImpl(private val api: GoongApiService) : EvRepository {
                     address = detail.formatted_address,
                     latitude = detail.geometry.location.lat,
                     longitude = detail.geometry.location.lng,
-                    distance = distanceKm
+                    distance = distanceKm,
+                    duration = durationText
                 )
             }
 
@@ -71,7 +79,7 @@ class EvRepositoryImpl(private val api: GoongApiService) : EvRepository {
 
     override suspend fun getPlaceDetail(placeId: String): Result<GoongPlaceDetailResult> {
         return try {
-            val response = api.getPlaceDetail(placeId)
+            val response = retryApiCall { api.getPlaceDetail(placeId) }
             if (response.status == "OK") {
                 Result.success(response.result)
             } else {
@@ -80,5 +88,26 @@ class EvRepositoryImpl(private val api: GoongApiService) : EvRepository {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private suspend fun <T> retryApiCall(
+        times: Int = 3,
+        initialDelay: Long = 1000,
+        block: suspend () -> T
+    ): T {
+        var currentDelay = initialDelay
+        repeat(times - 1) {
+            try {
+                return block()
+            } catch (e: HttpException) {
+                if (e.code() != 429) throw e
+                Log.w("EvRepository", "HTTP 429 detected, retrying in $currentDelay ms...")
+            } catch (e: Exception) {
+                throw e
+            }
+            delay(currentDelay)
+            currentDelay *= 2
+        }
+        return block()
     }
 }
