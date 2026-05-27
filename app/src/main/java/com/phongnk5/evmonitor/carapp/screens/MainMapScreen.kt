@@ -11,26 +11,20 @@ import android.text.SpannableString
 import android.util.Log
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
+import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.hardware.CarHardwareManager
 import androidx.car.app.model.*
+import androidx.car.app.navigation.model.MapWithContentTemplate
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.phongnk5.evmonitor.carapp.viewmodel.EvViewModel
-import com.phongnk5.evmonitor.di.CarAppEntryPoint
-import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.launch
 
-class MainMapScreen(carContext: CarContext) : Screen(carContext) {
-
-    private val entryPoint = EntryPointAccessors.fromApplication(carContext, CarAppEntryPoint::class.java)
-    private val viewModel = EvViewModel(
-        entryPoint.getStationsUseCase(),
-        entryPoint.getPlaceDetailUseCase()
-    )
+class MainMapScreen(carContext: CarContext, private val viewModel: EvViewModel) : Screen(carContext) {
 
     private var isLowBattery = false
-    private var currentLat = 21.0138 
-    private var currentLng = 105.5269 
+    private var currentLat = 21.0138
+    private var currentLng = 105.5269
     private var hasUpdatedLocation = false
 
     init {
@@ -39,6 +33,9 @@ class MainMapScreen(carContext: CarContext) : Screen(carContext) {
 
         lifecycleScope.launch {
             viewModel.stations.collect { invalidate() }
+        }
+        lifecycleScope.launch {
+            viewModel.currentRoutePolyline.collect { invalidate() }
         }
     }
 
@@ -59,6 +56,7 @@ class MainMapScreen(carContext: CarContext) : Screen(carContext) {
                 if (!hasUpdatedLocation) {
                     hasUpdatedLocation = true
                     viewModel.fetchStations(currentLat, currentLng)
+                    viewModel.setCameraTarget(currentLat, currentLng)
                 }
                 invalidate()
             }
@@ -72,6 +70,7 @@ class MainMapScreen(carContext: CarContext) : Screen(carContext) {
                 currentLng = it.longitude
                 if (!hasUpdatedLocation) {
                     viewModel.fetchStations(currentLat, currentLng)
+                    viewModel.setCameraTarget(currentLat, currentLng)
                 }
             }
         } catch (e: Exception) {
@@ -92,13 +91,22 @@ class MainMapScreen(carContext: CarContext) : Screen(carContext) {
         }
     }
 
+    private fun getListLimit(): Int {
+        return carContext.getCarService(ConstraintManager::class.java)
+            .getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_LIST)
+    }
+
     override fun onGetTemplate(): Template {
         val permissions = listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
         val isPermissionGranted = permissions.all { carContext.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
 
         if (!isPermissionGranted) {
             return MessageTemplate.Builder("Ứng dụng cần quyền vị trí.")
-                .setHeaderAction(Action.APP_ICON)
+                .setHeader(
+                    Header.Builder()
+                        .setStartHeaderAction(Action.APP_ICON)
+                        .build()
+                )
                 .addAction(Action.Builder().setTitle("Cấp quyền").setOnClickListener {
                     carContext.requestPermissions(permissions) { granted, _ ->
                         if (granted.contains(Manifest.permission.ACCESS_FINE_LOCATION)) {
@@ -110,22 +118,26 @@ class MainMapScreen(carContext: CarContext) : Screen(carContext) {
                 .build()
         }
 
+        val hasActiveRoute = viewModel.currentRoutePolyline.value != null
         val itemListBuilder = ItemList.Builder()
-        val stations = viewModel.stations.value
+        val visibleStations = viewModel.stations.value.take(getListLimit())
 
-        if (stations.isEmpty()) {
+        if (visibleStations.isEmpty()) {
             itemListBuilder.setNoItemsMessage(viewModel.apiStatus.value ?: "Đang tìm trạm sạc...")
         } else {
-            stations.forEach { station ->
-                // Hiển thị khoảng cách bằng DistanceSpan ở đầu tiêu đề
+            visibleStations.forEachIndexed { index, station ->
                 val distanceSpan = DistanceSpan.create(
                     Distance.create(station.distance, Distance.UNIT_KILOMETERS)
                 )
-                
-                val title = SpannableString("  ${station.name}")
-                title.setSpan(distanceSpan, 0, 1, SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE)
 
-                // Nội dung hiển thị thời gian dự kiến và địa chỉ
+                val title = SpannableString("${index + 1}. ${station.name}  ")
+                title.setSpan(
+                    distanceSpan,
+                    title.length - 1,
+                    title.length,
+                    SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+
                 val secondaryText = if (station.duration.isNotEmpty()) {
                     "Thời gian dự kiến: ${station.duration}"
                 } else {
@@ -135,8 +147,7 @@ class MainMapScreen(carContext: CarContext) : Screen(carContext) {
                 val rowBuilder = Row.Builder()
                     .setTitle(title)
                     .addText(secondaryText)
-                
-                // Nếu đã hiển thị duration ở dòng 1, hiển thị address ở dòng 2
+
                 if (station.duration.isNotEmpty()) {
                     rowBuilder.addText(station.address)
                 }
@@ -144,30 +155,47 @@ class MainMapScreen(carContext: CarContext) : Screen(carContext) {
                 itemListBuilder.addItem(
                     rowBuilder
                         .setOnClickListener {
-                            screenManager.push(StationDetailScreen(carContext, station.id, viewModel))
+                            viewModel.setCameraTarget(currentLat, currentLng)
+                            viewModel.getDirection(
+                                currentLat, currentLng,
+                                station.latitude, station.longitude
+                            )
                         }
-                        .setMetadata(
-                            Metadata.Builder()
-                                .setPlace(Place.Builder(CarLocation.create(station.latitude, station.longitude))
-                                    .setMarker(PlaceMarker.Builder().build())
-                                    .build())
-                                .build()
-                        )
                         .build()
                 )
             }
+
+            itemListBuilder.setOnItemsVisibilityChangedListener { startIndex, endIndex ->
+                viewModel.setVisibleRange(startIndex, endIndex)
+            }
         }
 
-        val anchor = Place.Builder(CarLocation.create(currentLat, currentLng))
-            .setMarker(PlaceMarker.Builder().setColor(CarColor.BLUE).build())
+        val headerBuilder = Header.Builder()
+            .setTitle(
+                when {
+                    hasActiveRoute -> "Đang dẫn đường"
+                    isLowBattery -> "Trạm sạc khẩn cấp"
+                    else -> "Trạm sạc lân cận"
+                }
+            )
+            .setStartHeaderAction(Action.APP_ICON)
+
+        if (hasActiveRoute) {
+            headerBuilder.addEndHeaderAction(
+                Action.Builder()
+                    .setTitle("Hủy")
+                    .setOnClickListener { viewModel.clearRoute() }
+                    .build()
+            )
+        }
+
+        val listTemplate = ListTemplate.Builder()
+            .setHeader(headerBuilder.build())
+            .setSingleList(itemListBuilder.build())
             .build()
 
-        return PlaceListMapTemplate.Builder()
-            .setTitle(if (isLowBattery) "Trạm sạc khẩn cấp" else "Trạm sạc lân cận")
-            .setItemList(itemListBuilder.build())
-            .setAnchor(anchor)
-            .setCurrentLocationEnabled(true)
-            .setHeaderAction(Action.APP_ICON)
+        return MapWithContentTemplate.Builder()
+            .setContentTemplate(listTemplate)
             .build()
     }
 }

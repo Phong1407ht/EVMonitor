@@ -52,3 +52,27 @@ data class DurationData(
     val text: String,
     val value: Long
 )
+
+data class GoongDirectionResponse(
+    val routes: List<GoongRoute>,
+    val status: String
+)
+
+data class GoongRoute(
+    val overview_polyline: GoongPolyline,
+    val legs: List<GoongLeg>
+)
+
+data class GoongPolyline(
+    val points: String
+)
+
+data class GoongLeg(
+    val distance: DistanceData,
+    val duration: DurationData,
+    val steps: List<GoongStep>
+)
+
+data class GoongStep(
+    val polyline: GoongPolyline
+)

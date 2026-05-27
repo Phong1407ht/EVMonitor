@@ -3,6 +3,7 @@ package com.phongnk5.evmonitor.data.repository
 import android.util.Log
 import com.phongnk5.evmonitor.data.apiservice.GoongApiService
 import com.phongnk5.evmonitor.data.DTOs.GoongPlaceDetailResult
+import com.phongnk5.evmonitor.data.DTOs.GoongDirectionResponse
 import com.phongnk5.evmonitor.domain.model.ChargingStation
 import com.phongnk5.evmonitor.domain.repository.EvRepository
 import kotlinx.coroutines.async
@@ -27,7 +28,6 @@ class EvRepositoryImpl(private val api: GoongApiService) : EvRepository {
             val detailDeferreds = autocompleteResponse.predictions.mapIndexed { index, prediction ->
                 async { 
                     try {
-                        // Stagger the requests slightly to avoid hitting rate limits instantly
                         if (index > 0) delay(index * 100L)
                         retryApiCall { api.getPlaceDetail(prediction.place_id).result }
                     } catch (e: Exception) {
@@ -82,6 +82,19 @@ class EvRepositoryImpl(private val api: GoongApiService) : EvRepository {
             val response = retryApiCall { api.getPlaceDetail(placeId) }
             if (response.status == "OK") {
                 Result.success(response.result)
+            } else {
+                Result.failure(Exception("API Error: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getDirection(origin: String, destination: String): Result<GoongDirectionResponse> {
+        return try {
+            val response = retryApiCall { api.getDirection(origin, destination) }
+            if (response.status == "OK") {
+                Result.success(response)
             } else {
                 Result.failure(Exception("API Error: ${response.status}"))
             }

@@ -36,6 +36,7 @@ android {
 }
 
 dependencies {
+    implementation("org.maplibre.gl:android-sdk:12.0.1")
     implementation(libs.retrofit)
     implementation(libs.retrofit2.converter.gson)
 

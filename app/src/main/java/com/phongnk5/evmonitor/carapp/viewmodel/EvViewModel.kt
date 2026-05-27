@@ -7,15 +7,18 @@ import com.phongnk5.evmonitor.data.DTOs.GoongPlaceDetailResult
 import com.phongnk5.evmonitor.domain.model.ChargingStation
 import com.phongnk5.evmonitor.domain.usecase.GetNearbyStationsUseCase
 import com.phongnk5.evmonitor.domain.usecase.GetPlaceDetailUseCase
+import com.phongnk5.evmonitor.domain.usecase.GetDirectionUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.maplibre.android.geometry.LatLng
 
 class EvViewModel(
     private val getNearbyStationsUseCase: GetNearbyStationsUseCase,
-    private val getPlaceDetailUseCase: GetPlaceDetailUseCase
+    private val getPlaceDetailUseCase: GetPlaceDetailUseCase,
+    private val getDirectionUseCase: GetDirectionUseCase
 ) : ViewModel() {
 
     private val _stations = MutableStateFlow<List<ChargingStation>>(emptyList())
@@ -26,6 +29,27 @@ class EvViewModel(
 
     private val _apiStatus = MutableStateFlow<String?>(null)
     val apiStatus: StateFlow<String?> = _apiStatus.asStateFlow()
+
+    private val _cameraTarget = MutableStateFlow<LatLng?>(null)
+    val cameraTarget: StateFlow<LatLng?> = _cameraTarget.asStateFlow()
+
+    private val _currentRoutePolyline = MutableStateFlow<String?>(null)
+    val currentRoutePolyline: StateFlow<String?> = _currentRoutePolyline.asStateFlow()
+
+    private val _visibleRange = MutableStateFlow<IntRange?>(null)
+    val visibleRange: StateFlow<IntRange?> = _visibleRange.asStateFlow()
+
+    fun setCameraTarget(lat: Double, lng: Double) {
+        _cameraTarget.value = LatLng(lat, lng)
+    }
+
+    fun setVisibleRange(startIndex: Int, endIndexExclusive: Int) {
+        if (startIndex < 0 || endIndexExclusive <= startIndex) {
+            _visibleRange.value = null
+            return
+        }
+        _visibleRange.value = startIndex until endIndexExclusive
+    }
 
     fun fetchStations(lat: Double, lng: Double) {
         viewModelScope.launch {
@@ -43,16 +67,36 @@ class EvViewModel(
         viewModelScope.launch {
             _selectedStationDetail.value = null
             _apiStatus.value = "Đang gọi API Place Detail (ID: $placeId)..."
-            
+
             getPlaceDetailUseCase(placeId).onSuccess { detail ->
                 _selectedStationDetail.value = detail
                 _apiStatus.value = "API Place Detail thành công: ${detail.name}"
                 updateStationInList(detail)
+                setCameraTarget(detail.geometry.location.lat, detail.geometry.location.lng)
             }.onFailure { e ->
                 _apiStatus.value = "API Place Detail thất bại: ${e.message}"
                 Log.e("EvViewModel", "Error fetching detail", e)
             }
         }
+    }
+
+    fun getDirection(originLat: Double, originLng: Double, destLat: Double, destLng: Double) {
+        viewModelScope.launch {
+            _apiStatus.value = "Đang lấy chỉ đường..."
+            val origin = "$originLat,$originLng"
+            val destination = "$destLat,$destLng"
+            getDirectionUseCase(origin, destination).onSuccess { response ->
+                val polyline = response.routes.firstOrNull()?.overview_polyline?.points
+                _currentRoutePolyline.value = polyline
+                _apiStatus.value = "Đã lấy được chỉ đường"
+            }.onFailure { e ->
+                _apiStatus.value = "Lỗi lấy chỉ đường: ${e.message}"
+            }
+        }
+    }
+
+    fun clearRoute() {
+        _currentRoutePolyline.value = null
     }
 
     private fun updateStationInList(detail: GoongPlaceDetailResult) {

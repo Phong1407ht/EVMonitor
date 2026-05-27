@@ -5,6 +5,6 @@ object GoongConfig {
     const val MAP_TILES_KEY = "6cgMmF4indu6IRaWdltLCl534WxoqThBV6r3RcAm"
     
     fun getStyleUrl(): String {
-        return "https://tiles.goong.io/assets/style/style.json?api_key=$MAP_TILES_KEY"
+        return "https://tiles.goong.io/assets/goong_map_web.json?api_key=$MAP_TILES_KEY"
     }
 }

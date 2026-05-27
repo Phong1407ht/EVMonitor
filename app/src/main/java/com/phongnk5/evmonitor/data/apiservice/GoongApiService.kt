@@ -3,6 +3,7 @@ package com.phongnk5.evmonitor.data.apiservice
 import com.phongnk5.evmonitor.data.DTOs.GoongAutocompleteResponse
 import com.phongnk5.evmonitor.data.DTOs.GoongDistanceMatrixResponse
 import com.phongnk5.evmonitor.data.DTOs.GoongPlaceDetailResponse
+import com.phongnk5.evmonitor.data.DTOs.GoongDirectionResponse
 import com.phongnk5.evmonitor.data.GoongConfig
 import retrofit2.http.GET
 import retrofit2.http.Query
@@ -30,4 +31,12 @@ interface GoongApiService {
         @Query("vehicle") vehicle: String = "car",
         @Query("api_key") apiKey: String = GoongConfig.REST_API_KEY
     ): GoongDistanceMatrixResponse
+
+    @GET("Direction")
+    suspend fun getDirection(
+        @Query("origin") origin: String,
+        @Query("destination") destination: String,
+        @Query("vehicle") vehicle: String = "car",
+        @Query("api_key") apiKey: String = GoongConfig.REST_API_KEY
+    ): GoongDirectionResponse
 }
