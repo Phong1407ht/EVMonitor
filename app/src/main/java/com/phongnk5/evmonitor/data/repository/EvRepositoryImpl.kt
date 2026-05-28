@@ -2,7 +2,6 @@ package com.phongnk5.evmonitor.data.repository
 
 import android.util.Log
 import com.phongnk5.evmonitor.data.apiservice.GoongApiService
-import com.phongnk5.evmonitor.data.DTOs.GoongPlaceDetailResult
 import com.phongnk5.evmonitor.data.DTOs.GoongDirectionResponse
 import com.phongnk5.evmonitor.domain.model.ChargingStation
 import com.phongnk5.evmonitor.domain.repository.EvRepository
@@ -20,13 +19,13 @@ class EvRepositoryImpl(private val api: GoongApiService) : EvRepository {
                 input = "trạm sạc ô tô điện",
                 location = "$lat,$lng"
             )
-            
+
             if (autocompleteResponse.predictions.isEmpty()) {
                 return@coroutineScope Result.success(emptyList())
             }
 
             val detailDeferreds = autocompleteResponse.predictions.mapIndexed { index, prediction ->
-                async { 
+                async {
                     try {
                         if (index > 0) delay(index * 100L)
                         retryApiCall { api.getPlaceDetail(prediction.place_id).result }
@@ -43,10 +42,10 @@ class EvRepositoryImpl(private val api: GoongApiService) : EvRepository {
             }
 
             val origins = "$lat,$lng"
-            val destinations = details.joinToString("|") { 
-                "${it.geometry.location.lat},${it.geometry.location.lng}" 
+            val destinations = details.joinToString("|") {
+                "${it.geometry.location.lat},${it.geometry.location.lng}"
             }
-            
+
             val distanceMatrixResponse = try {
                 retryApiCall { api.getDistanceMatrix(origins, destinations) }
             } catch (e: Exception) {
@@ -58,7 +57,7 @@ class EvRepositoryImpl(private val api: GoongApiService) : EvRepository {
                 val element = distanceMatrixResponse?.rows?.firstOrNull()?.elements?.getOrNull(index)
                 val distanceKm = element?.distance?.value?.div(1000.0) ?: 0.0
                 val durationText = element?.duration?.text ?: ""
-                
+
                 ChargingStation(
                     id = detail.place_id,
                     name = detail.name,
@@ -77,28 +76,20 @@ class EvRepositoryImpl(private val api: GoongApiService) : EvRepository {
         }
     }
 
-    override suspend fun getPlaceDetail(placeId: String): Result<GoongPlaceDetailResult> {
-        return try {
-            val response = retryApiCall { api.getPlaceDetail(placeId) }
-            if (response.status == "OK") {
-                Result.success(response.result)
-            } else {
-                Result.failure(Exception("API Error: ${response.status}"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
     override suspend fun getDirection(origin: String, destination: String): Result<GoongDirectionResponse> {
         return try {
             val response = retryApiCall { api.getDirection(origin, destination) }
-            if (response.status == "OK") {
+            if (response.routes?.isNotEmpty() == true) {
                 Result.success(response)
             } else {
-                Result.failure(Exception("API Error: ${response.status}"))
+                val errorMsg = response.status ?: "Không tìm thấy lộ trình giữa 2 điểm"
+                Result.failure(Exception(errorMsg))
             }
+        } catch (e: HttpException) {
+            Log.e("EvRepository", "Direction HTTP error: ${e.code()} ${e.message()}", e)
+            Result.failure(e)
         } catch (e: Exception) {
+            Log.e("EvRepository", "Direction failed", e)
             Result.failure(e)
         }
     }

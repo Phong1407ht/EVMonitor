@@ -5,5 +5,4 @@ import com.phongnk5.evmonitor.data.DTOs.GoongPlaceDetailResult
 
 interface ChargingStationRepository {
     suspend fun getNearbyStations(lat: Double, lng: Double): Result<List<ChargingStation>>
-    suspend fun getPlaceDetail(placeId: String): Result<GoongPlaceDetailResult>
 }

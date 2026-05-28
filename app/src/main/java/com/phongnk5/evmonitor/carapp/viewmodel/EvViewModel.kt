@@ -6,7 +6,6 @@ import androidx.lifecycle.viewModelScope
 import com.phongnk5.evmonitor.data.DTOs.GoongPlaceDetailResult
 import com.phongnk5.evmonitor.domain.model.ChargingStation
 import com.phongnk5.evmonitor.domain.usecase.GetNearbyStationsUseCase
-import com.phongnk5.evmonitor.domain.usecase.GetPlaceDetailUseCase
 import com.phongnk5.evmonitor.domain.usecase.GetDirectionUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +16,6 @@ import org.maplibre.android.geometry.LatLng
 
 class EvViewModel(
     private val getNearbyStationsUseCase: GetNearbyStationsUseCase,
-    private val getPlaceDetailUseCase: GetPlaceDetailUseCase,
     private val getDirectionUseCase: GetDirectionUseCase
 ) : ViewModel() {
 
@@ -63,34 +61,21 @@ class EvViewModel(
         }
     }
 
-    fun fetchPlaceDetail(placeId: String) {
-        viewModelScope.launch {
-            _selectedStationDetail.value = null
-            _apiStatus.value = "Đang gọi API Place Detail (ID: $placeId)..."
-
-            getPlaceDetailUseCase(placeId).onSuccess { detail ->
-                _selectedStationDetail.value = detail
-                _apiStatus.value = "API Place Detail thành công: ${detail.name}"
-                updateStationInList(detail)
-                setCameraTarget(detail.geometry.location.lat, detail.geometry.location.lng)
-            }.onFailure { e ->
-                _apiStatus.value = "API Place Detail thất bại: ${e.message}"
-                Log.e("EvViewModel", "Error fetching detail", e)
-            }
-        }
-    }
 
     fun getDirection(originLat: Double, originLng: Double, destLat: Double, destLng: Double) {
         viewModelScope.launch {
+            Log.d("EvViewModel", "Đang gọi API direction từ ($originLat,$originLng) đến ($destLat,$destLng)")
             _apiStatus.value = "Đang lấy chỉ đường..."
             val origin = "$originLat,$originLng"
             val destination = "$destLat,$destLng"
             getDirectionUseCase(origin, destination).onSuccess { response ->
-                val polyline = response.routes.firstOrNull()?.overview_polyline?.points
+                val polyline = response.routes?.firstOrNull()?.overview_polyline?.points
                 _currentRoutePolyline.value = polyline
                 _apiStatus.value = "Đã lấy được chỉ đường"
+                Log.d("EvViewModel", "Lấy chỉ đường THÀNH CÔNG: polyline=${polyline?.take(20)}...")
             }.onFailure { e ->
                 _apiStatus.value = "Lỗi lấy chỉ đường: ${e.message}"
+                Log.e("EvViewModel", "Lấy chỉ đường THẤT BẠI: ${e.message}", e)
             }
         }
     }

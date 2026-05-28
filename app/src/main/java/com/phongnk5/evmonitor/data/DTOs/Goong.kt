@@ -55,7 +55,8 @@ data class DurationData(
 
 data class GoongDirectionResponse(
     val routes: List<GoongRoute>,
-    val status: String
+    val geocoded_waypoints: List<Any>? = null,
+    val status: String? = null
 )
 
 data class GoongRoute(
